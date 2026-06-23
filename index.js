@@ -38,6 +38,38 @@ async function run() {
     res.send(result);
    });
 
+  app.get('/api/arts/:id', async (req, res) => {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) }; 
+    const result = await artCollection.findOne(query); 
+    res.send(result);
+});
+
+   app.delete('/api/arts/:id', async (req, res) => {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) }; 
+    const result = await artCollection.deleteOne(query);
+    res.send(result);
+});
+
+   app.put('/api/arts/:id', async (req, res) => {
+    const id = req.params.id;
+    const filter = { _id: new ObjectId(id) }; 
+    const updatedArt = req.body; 
+    
+    const updateDoc = {
+        $set: {
+            title: updatedArt.title,
+            description: updatedArt.description,
+            price: parseFloat(updatedArt.price), 
+            category: updatedArt.category,
+            imageUrl: updatedArt.imageUrl
+        },
+    };
+    
+    const result = await artCollection.updateOne(filter, updateDoc);
+    res.send(result); 
+});
   
   
 
