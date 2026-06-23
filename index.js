@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -33,7 +33,13 @@ async function run() {
         const result = await artCollection.insertOne(art);
         res.send(result)
     })
+    app.get('/api/all-arts', async (req, res) => {
+    const result = await artCollection.find().toArray();
+    res.send(result);
+   });
 
+  
+  
 
 
     // Send a ping to confirm a successful connection
