@@ -38,6 +38,18 @@ async function run() {
     res.send(result);
    });
 
+   app.get('/api/my-arts', async (req, res) => {
+      const email = req.query.email; 
+      
+      if (!email) {
+         return res.status(400).send({ message: "Email parameter is required" });
+      }
+      
+      const query = { artistEmail: email }; 
+      const result = await artCollection.find(query).toArray();
+      res.send(result);
+    });
+
   app.get('/api/arts/:id', async (req, res) => {
     const id = req.params.id;
     const query = { _id: new ObjectId(id) }; 
