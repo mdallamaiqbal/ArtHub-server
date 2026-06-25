@@ -35,9 +35,45 @@ async function run() {
         res.send(result)
     })
     app.get('/api/all-arts', async (req, res) => {
-    const result = await artCollection.find().toArray();
-    res.send(result);
-   });
+  const artsWithArtistInfo = await artCollection.aggregate([
+    {
+      $lookup: {
+        from: "user",
+        let: { artist_id: "$artistId" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: ["$_id", { $toObjectId: "$$artist_id" }]
+              }
+            }
+          }
+        ],
+        as: "artistDetails"
+      }
+    },
+    {
+      $unwind: {
+        path: "$artistDetails",
+        preserveNullAndEmptyArrays: true 
+      }
+    },
+    {
+      $project: {
+        title: 1,
+        description: 1,
+        price: 1,
+        category: 1,
+        imageUrl: 1,
+        artistId: 1,
+        artistName: "$artistDetails.name",
+        artistImage: "$artistDetails.image"
+      }
+    }
+  ]).toArray();
+
+  res.send(artsWithArtistInfo);
+});
 
    app.get('/api/my-arts', async (req, res) => {
      const artistId = req.query.artistId; 
