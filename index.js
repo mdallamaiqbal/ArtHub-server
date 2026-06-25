@@ -40,15 +40,16 @@ async function run() {
    });
 
    app.get('/api/my-arts', async (req, res) => {
-      const email = req.query.email; 
+     const artistId = req.query.artistId; 
+
+  if (!artistId) {
+     return res.status(400).send({ message: "Artist ID parameter is required" });
+  } 
+   const query = { artistId: artistId };
       
-      if (!email) {
-         return res.status(400).send({ message: "Email parameter is required" });
-      }
       
-      const query = { artistEmail: email }; 
-      const result = await artCollection.find(query).toArray();
-      res.send(result);
+  const result = await artCollection.find(query).toArray();
+  res.send(result);
     });
 
   app.get('/api/arts/:id', async (req, res) => {
