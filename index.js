@@ -73,7 +73,64 @@ async function run() {
   ]).toArray();
 
   res.send(artsWithArtistInfo);
-});
+  });
+
+   app.get('/api/all-arts/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const result = await artCollection.aggregate([
+      {
+        $match: {
+          _id: new ObjectId(id)
+        }
+      },
+      {
+        $lookup: {
+          from: "user",
+          let: { artist_id: "$artistId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$_id", { $toObjectId: "$$artist_id" }]
+                }
+              }
+            }
+          ],
+          as: "artistDetails"
+        }
+      },
+      {
+        $unwind: {
+          path: "$artistDetails",
+          preserveNullAndEmptyArrays: true 
+        }
+      },
+      {
+        $project: {
+          title: 1,
+          description: 1,
+          price: 1,
+          category: 1,
+          imageUrl: 1,
+          artistId: 1,
+          artistName: "$artistDetails.name",
+          artistImage: "$artistDetails.image"
+        }
+      }
+    ]).toArray();
+
+    if (result.length > 0) {
+      res.send(result[0]);
+    } else {
+      res.status(404).send({ message: "Artwork not found" });
+    }
+
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+  });
 
    app.get('/api/my-arts', async (req, res) => {
      const artistId = req.query.artistId; 
