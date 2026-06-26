@@ -231,6 +231,40 @@ async function run() {
   }
 });
 
+  app.delete('/api/comments/:commentId/reply/:replyId', async (req, res) => {
+  try {
+    const { commentId, replyId } = req.params;
+    const { userEmail } = req.query; 
+
+    if (!userEmail) {
+      return res.status(400).send({ message: "User email is required" });
+    }
+
+    const comment = await commentsCollection.findOne({ _id: new ObjectId(commentId) });
+    if (!comment) {
+      return res.status(404).send({ message: "Comment not found" });
+    }
+
+    const reply = comment.replies?.find(r => r.replyId.toString() === replyId);
+    if (!reply) {
+      return res.status(404).send({ message: "Reply not found" });
+    }
+
+    if (reply.userEmail !== userEmail) {
+      return res.status(403).send({ message: "You can only delete your own reply!" });
+    }
+
+    const result = await commentsCollection.updateOne(
+      { _id: new ObjectId(commentId) },
+      { $pull: { replies: { replyId: new ObjectId(replyId) } } }
+    );
+
+    res.send({ success: true, message: "Reply deleted successfully", result });
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
+
    app.patch('/api/users/update-profile', async (req, res) => {
   const { currentEmail, email, name, image } = req.body;
 
@@ -292,6 +326,35 @@ async function run() {
     );
 
     res.send(result);
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+  });
+
+  app.put('/api/comments/:id/reply', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userEmail, userName, userImage, text } = req.body;
+
+    if (!text || text.trim() === '') {
+      return res.status(400).send({ message: "Reply text cannot be empty" });
+    }
+
+    const newReply = {
+      replyId: new ObjectId(),
+      userEmail,
+      userName,
+      userImage,
+      text,
+      createdAt: new Date()
+    };
+
+    const result = await commentsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $push: { replies: newReply } }
+    );
+
+    res.send({ success: true, result });
   } catch (error) {
     res.status(500).send({ error: error.message });
   }
