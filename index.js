@@ -29,6 +29,7 @@ async function run() {
     const artCollection = database.collection("arts");
     const userCollection = database.collection("user");
     const commentsCollection = database.collection("comments");
+    const orderCollection = database.collection("orders")
     app.post('/api/arts' , async(req,res)=>{
         const art = req.body;
         const result = await artCollection.insertOne(art);
@@ -57,7 +58,28 @@ async function run() {
   } catch (error) {
     res.status(500).send({ error: error.message });
   }
-});
+  });
+  app.post('/api/orders', async (req, res) => {
+      try {
+        const { artId, artTitle, artistName, price,userId, userEmail, userName } = req.body;
+
+        const newOrder = {
+          artId,
+          artTitle,
+          artistName,
+          price: parseFloat(price),
+          userId,
+          userEmail,
+          userName,
+          purchaseDate: new Date()
+        };
+
+        const result = await orderCollection.insertOne(newOrder);
+        res.status(201).send(result);
+      } catch (error) {
+        res.status(500).send({ error: error.message });
+      }
+    });
     app.get('/api/all-arts', async (req, res) => {
   const artsWithArtistInfo = await artCollection.aggregate([
     {
@@ -98,6 +120,19 @@ async function run() {
 
   res.send(artsWithArtistInfo);
    });
+
+   app.get('/api/orders', async (req,res)=>{
+    const query = {};
+    if(req.query.userId){
+      query.userId= req.query.userId;
+    }
+    if(req.query.artId){
+      query.artId = req.query.artId;
+    }
+    const cursor = orderCollection.find(query);
+    const result = await cursor.toArray();
+    res.send(result);
+   })
 
    app.get('/api/all-arts/:id', async (req, res) => {
   try {
@@ -155,7 +190,19 @@ async function run() {
     res.status(500).send({ error: error.message });
   }
    });
+    app.get('/api/user-purchases/:email', async (req, res) => {
+      try {
+        const email = req.params.email;
+        const result = await orderCollection
+          .find({ userEmail: email })
+          .sort({ purchaseDate: -1 }) 
+          .toArray();
 
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: error.message });
+      }
+    });
    app.get('/api/my-arts', async (req, res) => {
      const artistId = req.query.artistId; 
 
