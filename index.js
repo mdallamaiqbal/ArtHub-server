@@ -63,12 +63,13 @@ async function run() {
   });
   app.post('/api/orders', async (req, res) => {
       try {
-        const { artId, artTitle, artistName,artImage, price,userId, userEmail, userName } = req.body;
+        const { artId, artTitle, artistName,artistId,artImage, price,userId, userEmail, userName } = req.body;
 
         const newOrder = {
           artId,
           artTitle,
           artistName,
+          artistId,
           artImage,
           price: parseFloat(price),
           userId,
@@ -211,6 +212,19 @@ async function run() {
       .toArray();
 
     res.send(result);
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
+app.get('/api/artist-sales/:artistId', async (req, res) => {
+  try {
+    const artistId = req.params.artistId;
+    const sales = await orderCollection
+      .find({ artistId: artistId }) 
+      .sort({ purchaseDate: -1 }) 
+      .toArray();
+
+    res.send(sales);
   } catch (error) {
     res.status(500).send({ error: error.message });
   }
