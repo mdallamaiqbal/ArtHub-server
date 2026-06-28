@@ -129,6 +129,18 @@ try {
     res.status(500).send({ error: error.message });
   }
 });
+ 
+ app.get('/api/admin/users', async (req, res) => {
+  try {
+    const users = await userCollection
+      .find({}, { projection: { password: 0 } }) 
+      .toArray();
+
+    res.send(users);
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
   
   app.get('/api/tier' , async(req, res)=>{
     const query = {}
@@ -324,6 +336,25 @@ app.get('/api/artist-sales/:artistId', async (req, res) => {
     res.send(result);
   });
 
+
+
+app.delete('/api/admin/artwork/:id', async (req, res) => {
+  try {
+    const artworkId = req.params.id;
+    const result = await artCollection.deleteOne({ _id: new ObjectId(artworkId) });
+    if (result.deletedCount > 0) {
+      await purchaseCollection.updateMany(
+        { artId: new ObjectId(artworkId) },
+        { $set: { artId: null } }
+      );
+      res.send({ success: true, message: "Artwork deleted and purchases updated successfully!" });
+    } else {
+      res.status(404).send({ error: "Artwork not found" });
+    }
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
   app.delete('/api/comments/:id', async (req, res) => {
   try {
     const commentId = req.params.id;
@@ -407,6 +438,24 @@ app.get('/api/artist-sales/:artistId', async (req, res) => {
     res.status(500).send({ message: "Internal server error" });
   }
   });
+
+  app.patch('/api/admin/update-role', async (req, res) => {
+  try {
+    const { userId, newRole } = req.body;
+    const result = await userCollection.updateOne(
+      { _id: new ObjectId(userId) },
+      { $set: { role: newRole } }
+    );
+
+    if (result.modifiedCount > 0) {
+      res.send({ success: true, message: "Role updated successfully!" });
+    } else {
+      res.status(400).send({ error: "Failed to update or role is already the same" });
+    }
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
 
    app.put('/api/arts/:id', async (req, res) => {
     const id = req.params.id;
