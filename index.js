@@ -84,6 +84,51 @@ async function run() {
         res.status(500).send({ error: error.message });
       }
     });
+   app.get('/api/admin/transactions', async (req, res) => {
+  try {
+    const orders = await orderCollection.find({}).toArray();
+    const purchaseTransactions = orders.map(order => ({
+      transactionId: order._id,
+      type: 'purchase',
+      userId: order.userId || null,
+      email: order.userEmail || 'N/A',
+      amount: Number(order.price) || 0,
+      date: order.purchaseDate
+    }));
+
+   let subscriptionTransactions = [];
+try {
+  const subscriptions = await subscriptionCollection.find({}).toArray();
+  subscriptionTransactions = await Promise.all(subscriptions.map(async (sub) => {
+    let calculatedAmount = 0;
+    if (sub.tierId === 'user_pro') {
+      calculatedAmount = 19.99; 
+    } else if (sub.tierId === 'artist_premium') {
+      calculatedAmount = 49.99; 
+    }
+    const matchedUser = await userCollection.findOne({ email: sub.email });
+    const foundUserId = matchedUser ? matchedUser._id : null;
+
+    return {
+      transactionId: sub._id,
+      type: 'subscription',
+      userId: foundUserId || null,
+      email: sub.email || 'N/A',
+      amount: calculatedAmount,
+      date: sub.createdAt || sub.date
+    };
+  }));
+    } catch (e) {
+      console.log("Subscription collection not found or empty", e.message);
+    }
+    const allTransactions = [...purchaseTransactions, ...subscriptionTransactions]
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    res.send(allTransactions);
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
   
   app.get('/api/tier' , async(req, res)=>{
     const query = {}
