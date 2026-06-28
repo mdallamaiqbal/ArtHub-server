@@ -141,7 +141,32 @@ try {
     res.status(500).send({ error: error.message });
   }
 });
-  
+ app.get('/api/admin/analytics', async (req, res) => {
+  try {
+    const totalUsers = await userCollection.countDocuments({ role: 'user' });
+    const totalArtists = await userCollection.countDocuments({ role: 'artist' });
+    const totalArtworksSold = await orderCollection.countDocuments({});
+    const revenueResult = await orderCollection.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$price" }
+        }
+      }
+    ]).toArray();
+
+    const totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+    res.send({
+      totalUsers,
+      totalArtists,
+      totalArtworksSold,
+      totalRevenue
+    });
+
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
   app.get('/api/tier' , async(req, res)=>{
     const query = {}
     if(req.query.tier_id){
