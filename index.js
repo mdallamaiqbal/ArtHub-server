@@ -30,6 +30,8 @@ async function run() {
     const userCollection = database.collection("user");
     const commentsCollection = database.collection("comments");
     const orderCollection = database.collection("orders")
+    const tierCollection = database.collection("tier")
+    const subscriptionCollection = database.collection("subscriptions")
     app.post('/api/arts' , async(req,res)=>{
         const art = req.body;
         const result = await artCollection.insertOne(art);
@@ -80,6 +82,15 @@ async function run() {
         res.status(500).send({ error: error.message });
       }
     });
+  
+  app.get('/api/tier' , async(req, res)=>{
+    const query = {}
+    if(req.query.tier_id){
+      query.id = req.query.tier_id
+    }
+    const tier = await tierCollection.findOne(query);
+    res.send(tier)
+  })
     app.get('/api/all-arts', async (req, res) => {
   const artsWithArtistInfo = await artCollection.aggregate([
     {
@@ -407,7 +418,22 @@ async function run() {
   }
 });
   
-  
+  app.post('/api/subscriptions' , async(req,res)=>{
+    const data = req.body;
+    const subsInfo = {
+      ...data,
+      createdAt: new Date()
+    }
+    const result = await subscriptionCollection.insertOne(subsInfo);
+    const filter = {email: data.email};
+    const updateDocument = {
+      $set: {
+       tier: data.tierId
+      }
+    }
+    const updateResult = await userCollection.updateOne(filter , updateDocument)
+    res.send(updateResult)
+  })
 
 
     // Send a ping to confirm a successful connection
