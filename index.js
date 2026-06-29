@@ -102,9 +102,9 @@ try {
   subscriptionTransactions = await Promise.all(subscriptions.map(async (sub) => {
     let calculatedAmount = 0;
     if (sub.tierId === 'user_pro') {
+      calculatedAmount = 9.99; 
+    } else if (sub.tierId === 'user_premium') {
       calculatedAmount = 19.99; 
-    } else if (sub.tierId === 'artist_premium') {
-      calculatedAmount = 49.99; 
     }
     const matchedUser = await userCollection.findOne({ email: sub.email });
     const foundUserId = matchedUser ? matchedUser._id : null;
