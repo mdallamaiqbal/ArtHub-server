@@ -13,6 +13,7 @@ app.get('/', (req, res) => {
   res.send('Hello World!')
 })
 
+
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -32,12 +33,63 @@ async function run() {
     const orderCollection = database.collection("orders")
     const tierCollection = database.collection("tier")
     const subscriptionCollection = database.collection("subscriptions")
-    app.post('/api/arts' , async(req,res)=>{
+    const sessionCollection = database.collection("session")
+    
+    const verifyToken=async(req,res,next)=>{
+    const authHeader = req.headers?.authorization
+    if(!authHeader){
+      return res.status(401).send({message: 'unauthorized access'})
+    }
+    const token = authHeader.split(' ')[1]
+     if(!token){
+    return res.status(401).send({message: 'unauthorized access'})
+   }
+   const query = {token: token}
+   const session = await sessionCollection.findOne(query)
+   
+    if(!session){
+    return res.status(401).send({message: 'unauthorized access'})
+   }
+
+   const userId = session.userId;
+   const userQuery={
+    _id: userId
+   }
+   const user = await userCollection.findOne(userQuery);
+    if(!user){
+    return res.status(401).send({message: 'unauthorized access'})
+   }
+   req.user = user
+   next()
+  }
+ //must be used after verifyToken middleware
+  const verifyUser = async(req,res,next)=>{
+    if(req.user?.role !=='user'){
+      return res.status(403).send({message: 'forbidden access'})
+    }
+    next()
+  }
+  //must be used after verifyToken middleware
+  const verifyArtist = async(req,res,next)=>{
+    if(req.user?.role !=='artist'){
+      return res.status(403).send({message: 'forbidden access'})
+    }
+    next()
+  }
+  //must be used after verifyToken middleware
+  const verifyAdmin = async(req,res,next)=>{
+    if(req.user?.role !=='admin'){
+      return res.status(403).send({message: 'forbidden access'})
+    }
+    next()
+  }
+    
+    app.post('/api/arts',verifyToken, verifyArtist, async(req,res)=>{
         const art = req.body;
         const result = await artCollection.insertOne(art);
         res.send(result)
     })
-  app.post('/api/comments', async (req, res) => {
+  app.post('/api/comments',verifyToken, async (req, res) => {
   try {
     const { artId, artistId, userEmail, userName, userImage, text } = req.body;
     
@@ -61,7 +113,7 @@ async function run() {
     res.status(500).send({ error: error.message });
   }
   });
-  app.post('/api/orders', async (req, res) => {
+  app.post('/api/orders',verifyToken, verifyUser, async (req, res) => {
       try {
         const { artId, artTitle, artistName,artistId,artImage, price,userId, userEmail, userName } = req.body;
 
@@ -84,7 +136,7 @@ async function run() {
         res.status(500).send({ error: error.message });
       }
     });
-   app.get('/api/admin/transactions', async (req, res) => {
+  app.get('/api/admin/transactions',verifyToken, verifyAdmin, async (req, res) => {
   try {
     const orders = await orderCollection.find({}).toArray();
     const purchaseTransactions = orders.map(order => ({
@@ -130,7 +182,7 @@ try {
   }
 });
  
- app.get('/api/admin/users', async (req, res) => {
+ app.get('/api/admin/users',verifyToken, verifyAdmin, async (req, res) => {
   try {
     const users = await userCollection
       .find({}, { projection: { password: 0 } }) 
@@ -141,26 +193,42 @@ try {
     res.status(500).send({ error: error.message });
   }
 });
- app.get('/api/admin/analytics', async (req, res) => {
+app.get('/api/admin/analytics',verifyToken, verifyAdmin, async (req, res) => {
   try {
     const totalUsers = await userCollection.countDocuments({ role: 'user' });
     const totalArtists = await userCollection.countDocuments({ role: 'artist' });
     const totalArtworksSold = await orderCollection.countDocuments({});
+
     const revenueResult = await orderCollection.aggregate([
+      { $group: { _id: null, total: { $sum: "$price" } } }
+    ]).toArray();
+    const totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+    const salesChartData = await orderCollection.aggregate([
       {
         $group: {
-          _id: null,
-          total: { $sum: "$price" }
+          _id: { $dateToString: { format: "%b %d", date: "$purchaseDate" } }, 
+          sales: { $sum: "$price" }
         }
-      }
+      },
+      { $sort: { _id: 1 } },
+      { $project: { name: "$_id", sales: 1, _id: 0 } }
     ]).toArray();
-
-    const totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+    const categoryData = await artCollection.aggregate([
+      {
+        $group: {
+          _id: "$category",
+          value: { $sum: 1 } 
+        }
+      },
+      { $project: { name: "$_id", value: 1, _id: 0 } } 
+    ]).toArray();
     res.send({
       totalUsers,
       totalArtists,
       totalArtworksSold,
-      totalRevenue
+      totalRevenue,
+      salesChartData: salesChartData.length > 0 ? salesChartData : [{ name: 'No Data', sales: 0 }],
+      categoryData: categoryData.length > 0 ? categoryData : [{ name: 'No Category', value: 1 }]
     });
 
   } catch (error) {
@@ -175,7 +243,7 @@ try {
     const tier = await tierCollection.findOne(query);
     res.send(tier)
   })
-    app.get('/api/all-arts', async (req, res) => {
+    app.get('/api/all-arts', verifyToken, async (req, res) => {
   const artsWithArtistInfo = await artCollection.aggregate([
     {
       $lookup: {
@@ -216,10 +284,13 @@ try {
   res.send(artsWithArtistInfo);
    });
 
-   app.get('/api/orders', async (req,res)=>{
+   app.get('/api/orders', verifyToken, verifyUser,async (req,res)=>{
     const query = {};
     if(req.query.userId){
       query.userId= req.query.userId;
+      if(req.user._id.toString() !==req.query.userId){
+        return res.status(403).send({message: 'forbidden access'})
+      }
     }
     if(req.query.artId){
       query.artId = req.query.artId;
@@ -298,7 +369,7 @@ try {
     res.status(500).send({ error: error.message });
   }
 });
-app.get('/api/artist-sales/:artistId', async (req, res) => {
+app.get('/api/artist-sales/:artistId',verifyToken, verifyArtist, async (req, res) => {
   try {
     const artistId = req.params.artistId;
     const sales = await orderCollection
@@ -311,7 +382,7 @@ app.get('/api/artist-sales/:artistId', async (req, res) => {
     res.status(500).send({ error: error.message });
   }
 });
-   app.get('/api/my-arts', async (req, res) => {
+   app.get('/api/my-arts',verifyToken, verifyArtist, async (req, res) => {
      const artistId = req.query.artistId; 
 
   if (!artistId) {
@@ -354,7 +425,7 @@ app.get('/api/artist-sales/:artistId', async (req, res) => {
   }
  });
 
-   app.delete('/api/arts/:id', async (req, res) => {
+   app.delete('/api/arts/:id',verifyToken, verifyArtist, async (req, res) => {
     const id = req.params.id;
     const query = { _id: new ObjectId(id) }; 
     const result = await artCollection.deleteOne(query);
@@ -363,7 +434,7 @@ app.get('/api/artist-sales/:artistId', async (req, res) => {
 
 
 
-app.delete('/api/admin/artwork/:id', async (req, res) => {
+app.delete('/api/admin/artwork/:id',verifyToken, verifyAdmin, async (req, res) => {
   try {
     const artworkId = req.params.id;
     const result = await artCollection.deleteOne({ _id: new ObjectId(artworkId) });
@@ -380,7 +451,7 @@ app.delete('/api/admin/artwork/:id', async (req, res) => {
     res.status(500).send({ error: error.message });
   }
 });
-  app.delete('/api/comments/:id', async (req, res) => {
+  app.delete('/api/comments/:id',  verifyToken ,async (req, res) => {
   try {
     const commentId = req.params.id;
     const { userEmail, loggedInArtistId } = req.body; 
@@ -405,7 +476,7 @@ app.delete('/api/admin/artwork/:id', async (req, res) => {
   }
 });
 
-  app.delete('/api/comments/:commentId/reply/:replyId', async (req, res) => {
+  app.delete('/api/comments/:commentId/reply/:replyId',verifyToken , async (req, res) => {
   try {
     const { commentId, replyId } = req.params;
     const { userEmail } = req.query; 
@@ -439,7 +510,7 @@ app.delete('/api/admin/artwork/:id', async (req, res) => {
   }
 });
 
-   app.patch('/api/users/update-profile', async (req, res) => {
+   app.patch('/api/users/update-profile',verifyToken, async (req, res) => {
   const { currentEmail, email, name, image } = req.body;
 
   if (!currentEmail) {
@@ -464,7 +535,7 @@ app.delete('/api/admin/artwork/:id', async (req, res) => {
   }
   });
 
-  app.patch('/api/admin/update-role', async (req, res) => {
+  app.patch('/api/admin/update-role',verifyToken, verifyAdmin, async (req, res) => {
   try {
     const { userId, newRole } = req.body;
     const result = await userCollection.updateOne(
@@ -482,7 +553,7 @@ app.delete('/api/admin/artwork/:id', async (req, res) => {
   }
 });
 
-   app.put('/api/arts/:id', async (req, res) => {
+   app.put('/api/arts/:id',verifyToken, verifyArtist, async (req, res) => {
     const id = req.params.id;
     const filter = { _id: new ObjectId(id) }; 
     const updatedArt = req.body; 
@@ -500,7 +571,7 @@ app.delete('/api/admin/artwork/:id', async (req, res) => {
     res.send(result); 
   });
 
-  app.put('/api/comments/:id', async (req, res) => {
+  app.put('/api/comments/:id',verifyToken, async (req, res) => {
   try {
     const commentId = req.params.id;
     const { text, userEmail } = req.body;
@@ -523,7 +594,7 @@ app.delete('/api/admin/artwork/:id', async (req, res) => {
   }
   });
 
-  app.put('/api/comments/:id/reply', async (req, res) => {
+  app.put('/api/comments/:id/reply',verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userEmail, userName, userImage, text } = req.body;
@@ -552,7 +623,7 @@ app.delete('/api/admin/artwork/:id', async (req, res) => {
   }
 });
   
-  app.post('/api/subscriptions' , async(req,res)=>{
+  app.post('/api/subscriptions' , verifyToken, verifyUser, async(req,res)=>{
     const data = req.body;
     const subsInfo = {
       ...data,
